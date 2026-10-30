@@ -6,7 +6,10 @@ export async function middleware(request:NextRequest) {
  const supabase=createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{cookies:{getAll(){return request.cookies.getAll();},setAll(cookies){cookies.forEach(({name,value})=>request.cookies.set(name,value));response=NextResponse.next({request});cookies.forEach(({name,value,options})=>response.cookies.set(name,value,options));}}});
  const {data:{user}}=await supabase.auth.getUser();
  const path=request.nextUrl.pathname;
- if(!user&&path==='/')return NextResponse.redirect(new URL('/login',request.url));
+ if(!user&&(path==='/'||path.startsWith('/api/receptionist')||path.startsWith('/api/leads'))){
+  if(path.startsWith('/api/'))return NextResponse.json({error:'Authentication required.'},{status:401});
+  return NextResponse.redirect(new URL('/login',request.url));
+ }
  if(user&&(path==='/login'||path==='/signup'))return NextResponse.redirect(new URL('/',request.url));
  return response;
 }
