@@ -31,7 +31,7 @@ Return ONLY valid JSON with this exact shape:
 Set lead to an object only when caller has clearly provided at least one contact method and expressed a genuine enquiry or follow-up need. Include only details actually provided. Do not make up missing values. Keep summary factual and short. Set complete true when the enquiry is ready for staff follow-up.`;
 
     const contents = [{ role: 'user', parts: [{ text: system }] }, ...messages];
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
@@ -43,7 +43,17 @@ Set lead to an object only when caller has clearly provided at least one contact
     const payload = await response.json();
     if (!response.ok) {
       console.error('Gemini request failed:', response.status, payload?.error?.message);
-      return NextResponse.json({ error: 'The AI service could not respond. Check the Gemini key and free-tier quota.' }, { status: 502 });
+      const apiMessage = String(payload?.error?.message || '');
+      if (response.status === 429) {
+        return NextResponse.json({ error: 'Gemini rate limit or quota reached. Check your Google AI Studio usage and try again later.' }, { status: 429 });
+      }
+      if (response.status === 400 && /API key not valid|API_KEY_INVALID/i.test(apiMessage)) {
+        return NextResponse.json({ error: 'The Gemini API key configured on Vercel is invalid. Replace GEMINI_API_KEY in Vercel Environment Variables.' }, { status: 502 });
+      }
+      if (response.status === 404) {
+        return NextResponse.json({ error: 'The configured Gemini model is unavailable for this API key or project.' }, { status: 502 });
+      }
+      return NextResponse.json({ error: `Gemini API error (${response.status}): ${apiMessage.slice(0, 240) || 'Unknown provider error'}` }, { status: 502 });
     }
     const raw = payload?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('');
     if (!raw) return NextResponse.json({ error: 'Gemini returned an empty response. Please try again.' }, { status: 502 });
