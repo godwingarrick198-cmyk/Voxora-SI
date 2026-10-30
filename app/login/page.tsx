@@ -13,13 +13,15 @@ export default function LoginPage() {
   const [busy,setBusy]=useState(false);
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault(); setBusy(true); setError('');
+    const normalizedEmail=email.trim().toLowerCase();
+    if(!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\\.com$/i.test(normalizedEmail)){setBusy(false);setError('Use the Gmail address registered with Vexora.');return;}
     const supabase=createClient();
-    const {error}=await supabase.auth.signInWithPassword({email,password});
+    const {error}=await supabase.auth.signInWithPassword({email:normalizedEmail,password});
     setBusy(false);
     if(error){setError(error.message);return;}
     router.replace('/'); router.refresh();
   }
-  return <main style={shell}><section style={card}><div style={mark}>V</div><p style={eyebrow}>VEXORA SUPER INTELLIGENCE</p><h1>Welcome back.</h1><p style={muted}>Sign in to manage your business receptionist.</p><form onSubmit={submit} style={{display:'grid',gap:14,marginTop:28}}><label style={label}>Email<input style={input} type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} /></label><label style={label}>Password<input style={input} type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} /></label>{error&&<p style={errorStyle}>{error}</p>}<button disabled={busy} style={button}>{busy?'Signing in…':'Sign in'}</button></form><p style={foot}>New to Vexora? <Link href="/signup" style={link}>Create an account</Link></p></section></main>;
+  return <main style={shell}><section style={card}><div style={mark}>V</div><p style={eyebrow}>VEXORA SUPER INTELLIGENCE</p><h1>Welcome back.</h1><p style={muted}>Sign in to manage your business receptionist.</p><form onSubmit={submit} style={{display:'grid',gap:14,marginTop:28}}><label style={label}>Gmail address<input style={input} type="email" placeholder="you@gmail.com" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} /></label><label style={label}>Password<input style={input} type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} /></label>{error&&<p style={errorStyle}>{error}</p>}<button disabled={busy} style={button}>{busy?'Signing in…':'Sign in'}</button></form><p style={foot}>New to Vexora? <Link href="/signup" style={link}>Create an account</Link></p></section></main>;
 }
 const shell:React.CSSProperties={minHeight:'100vh',display:'grid',placeItems:'center',padding:20,background:'#090d18',color:'#f7f8fc',fontFamily:'Arial,sans-serif'};
 const card:React.CSSProperties={width:'100%',maxWidth:430,padding:36,border:'1px solid #242c40',borderRadius:22,background:'#111827',boxShadow:'0 25px 90px #0007'};
