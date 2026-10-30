@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Activity, ArrowDownLeft, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, CircleHelp, Command, Headphones, LayoutDashboard, Menu, MessageSquareText, Phone, Plus, Search, Settings2, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Activity, ArrowDownLeft, ArrowUpRight, Bot, CalendarClock, Check, ChevronDown, CircleHelp, Command, Headphones, LayoutDashboard, Menu, MessageSquareText, Phone, Plus, Search, Settings2, ShieldCheck, Sparkles, Users, X, Moon, Sun } from 'lucide-react';
 
 const initialLeads = [
   { name: 'Olivia Carter', company: 'Northstar Properties', intent: 'Property viewing', status: 'Hot lead', time: '2 min ago', initials: 'OC', color: 'lavender' },
@@ -17,10 +17,16 @@ export default function Home() {
   const [leads, setLeads] = useState(initialLeads);
   const [search, setSearch] = useState('');
   const [agentOn, setAgentOn] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  useEffect(() => { setDarkMode(localStorage.getItem('voxora-theme') === 'dark'); }, []);
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+    localStorage.setItem('voxora-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
   const nav = [{ label: 'Overview', icon: LayoutDashboard }, { label: 'AI receptionist', icon: Bot }, { label: 'Leads', icon: Users }, { label: 'Call history', icon: Phone }, { label: 'Follow-ups', icon: CalendarClock }];
   const filtered = leads.filter(l => `${l.name} ${l.company} ${l.intent}`.toLowerCase().includes(search.toLowerCase()));
 
-  return <main className="app-shell">
+  return <main className={`app-shell ${darkMode ? 'theme-dark' : ''}`}>
     <aside className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Command size={21} strokeWidth={2.5}/></div><span>voxora<span className="brand-ai">.ai</span></span><button className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={18}/></button></div>
       <div className="workspace-label">WORKSPACE</div><button className="workspace"><div className="workspace-avatar">N</div><span><b>Northstar Realty</b><small>Free workspace</small></span><ChevronDown size={16}/></button>
@@ -29,7 +35,7 @@ export default function Home() {
       <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><CircleHelp size={17}/></div><b>Need a hand?</b><p>Get help setting up your AI receptionist.</p><button onClick={() => setShowSetup(true)}>Explore setup <ArrowUpRight size={14}/></button></div><div className="profile"><div className="profile-avatar">GG</div><span><b>Garrick Godwin</b><small>Workspace owner</small></span><ChevronDown size={15}/></div></div>
     </aside>
     {menuOpen && <button className="mobile-scrim" onClick={() => setMenuOpen(false)} aria-label="Close navigation"/>}
-    <section className="main-area"><header className="topbar"><button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20}/></button><div className="breadcrumb">Workspace <span>/</span> <b>{active}</b></div><div className="top-actions"><div className="system-status"><span/> All systems normal</div><button className="icon-button" aria-label="Help"><CircleHelp size={18}/></button><div className="top-avatar">GG</div></div></header>
+    <section className="main-area"><header className="topbar"><button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20}/></button><div className="breadcrumb">Workspace <span>/</span> <b>{active}</b></div><div className="top-actions"><button className="theme-toggle" onClick={() => setDarkMode(v => !v)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>{darkMode ? <Sun size={17}/> : <Moon size={17}/>}<span>{darkMode ? "Light mode" : "Dark mode"}</span></button><div className="system-status"><span/> All systems normal</div><button className="icon-button" aria-label="Help"><CircleHelp size={18}/></button><div className="top-avatar">GG</div></div></header>
       <div className="content"><div className="page-heading"><div><div className="eyebrow"><Sparkles size={13}/> YOUR AI FRONT DESK</div><h1>{active === 'Overview' ? 'Good morning, Garrick' : active}</h1><p>{active === 'Overview' ? 'Here’s what’s happening with your business today.' : `Manage your ${active.toLowerCase()} in one place.`}</p></div><button className="primary-button" onClick={() => setShowSetup(true)}><Plus size={17}/> Set up receptionist</button></div>
       <div className="welcome-banner"><div className="banner-orb orb-one"/><div className="banner-orb orb-two"/><div className="banner-content"><div className="banner-tag"><Sparkles size={13}/> MEET YOUR AI RECEPTIONIST</div><h2>Every call matters.<br/><span>Never miss a lead.</span></h2><p>Your always-on front desk is one setup away from welcoming every caller and capturing every opportunity.</p><button className="banner-button" onClick={() => window.location.assign('/try')}>Try your AI receptionist <ArrowUpRight size={16}/></button></div><div className="banner-visual"><div className="visual-ring ring-a"/><div className="visual-ring ring-b"/><div className="bot-orb"><Bot size={49} strokeWidth={1.4}/><span className="orb-spark spark-a">✳</span><span className="orb-spark spark-b">✦</span></div><div className="floating-pill pill-call"><span className="pill-dot"/><Phone size={14}/> Incoming call <b>+1 (415) ••• 2084</b></div><div className="floating-pill pill-lead"><span className="lead-check"><Check size={12}/></span><div><b>Lead captured</b><small>Viewing request · just now</small></div></div></div></div>
       <div className="section-title-row"><div><h3>At a glance</h3><p>A snapshot of your receptionist activity</p></div><button className="period-select">Last 7 days <ChevronDown size={15}/></button></div>
