@@ -1,4 +1,4 @@
--- Voxora AI initial schema. Apply only to a dedicated Voxora Supabase project.
+-- Vexora SI schema for its dedicated Supabase project.
 create extension if not exists pgcrypto;
 
 create table if not exists public.businesses (
@@ -7,6 +7,7 @@ create table if not exists public.businesses (
   name text not null,
   industry text not null default 'other',
   timezone text not null default 'UTC',
+  business_phone text,
   created_at timestamptz not null default now()
 );
 
