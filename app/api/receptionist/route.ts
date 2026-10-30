@@ -31,14 +31,14 @@ Return ONLY valid JSON with this exact shape:
 Set lead to an object only when caller has clearly provided at least one contact method and expressed a genuine enquiry or follow-up need. Include only details actually provided. Do not make up missing values. Keep summary factual and short. Set complete true when the enquiry is ready for staff follow-up.`;
 
     const contents = [{ role: 'user', parts: [{ text: system }] }, ...messages];
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents,
         generationConfig: { temperature: 0.4, responseMimeType: 'application/json' }
       }),
-      signal: AbortSignal.timeout(25000)
+      signal: AbortSignal.timeout(20000)
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -65,6 +65,10 @@ Set lead to an object only when caller has clearly provided at least one contact
       complete: Boolean(parsed.complete)
     });
   } catch (error) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      console.error('Gemini request timed out:', error.name);
+      return NextResponse.json({ error: 'The AI is taking too long to respond. Please try again.' }, { status: 504 });
+    }
     console.error('Receptionist route error:', error);
     return NextResponse.json({ error: 'Something went wrong while generating the receptionist response.' }, { status: 500 });
   }
