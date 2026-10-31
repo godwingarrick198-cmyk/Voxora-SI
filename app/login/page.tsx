@@ -14,7 +14,7 @@ export default function LoginPage() {
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault(); setBusy(true); setError('');
     const normalizedEmail=email.trim().toLowerCase();
-    if(!/^[a-z0-9.!#$%&'*+/=?^`{|}~-]+@gmail\\.com$/i.test(normalizedEmail)){setBusy(false);setError('Use the Gmail address registered with Vexora.');return;}
+    if(!/^[a-z0-9.!#$%&'*+/=?^`{|}~-]+@gmail\.com$/i.test(normalizedEmail)){setBusy(false);setError('Use the Gmail address registered with Vexora.');return;}
     const supabase=createClient();
     const {error}=await supabase.auth.signInWithPassword({email:normalizedEmail,password});
     setBusy(false);
