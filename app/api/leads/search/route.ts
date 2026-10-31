@@ -71,8 +71,24 @@ export async function POST(request: NextRequest) {
     if (!businessResponse.ok || !Array.isArray(businesses) || !businesses[0]) return NextResponse.json({ error: 'Business workspace not found or access denied.' }, { status: 403 });
 
     const searchText = [query, country ? 'in ' + country : ''].filter(Boolean).join(' ');
-    const searchResult = await searchPublicWeb(searchText);
-    const rawItems = searchResult.items.slice(0, 18);
+    const intentSearches = [
+      searchText,
+      [query, '"looking for" OR "need" OR "seeking" OR "request for proposal"', country].filter(Boolean).join(' '),
+      [query, '"hire" OR "freelance" OR "web project" OR "website redesign"', country].filter(Boolean).join(' '),
+      ['"request for proposal" OR "RFP"', query, country].filter(Boolean).join(' ')
+    ];
+    const searchRuns = await Promise.allSettled(intentSearches.map((text) => searchPublicWeb(text)));
+    const successfulRuns = searchRuns.flatMap((run) => run.status === 'fulfilled' ? [run.value] : []);
+    if (!successfulRuns.length) throw new Error('Search providers did not return usable results. Try again shortly.');
+    const seenUrls = new Set<string>();
+    const mergedItems = successfulRuns.flatMap((run) => run.items).filter((item) => {
+      const normalized = item.link.split('#')[0].replace(/\/$/, '').toLowerCase();
+      if (seenUrls.has(normalized)) return false;
+      seenUrls.add(normalized);
+      return true;
+    });
+    const searchResult = { items: mergedItems, provider: [...new Set(successfulRuns.map((run) => run.provider))].join(' + ') };
+    const rawItems = searchResult.items.slice(0, 40);
     console.info('Lead search provider returned results:', searchResult.provider, rawItems.length);
     if (!rawItems.length) return NextResponse.json({ error: 'No indexed results were returned. Try a more specific search phrase or another country.' }, { status: 200, headers: { 'x-vexora-empty': '1' } });
 
@@ -95,7 +111,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
     try { parsed = JSON.parse(output || '{}'); } catch { return NextResponse.json({ error: 'AI returned an unreadable result. Please retry.' }, { status: 502 }); }
     const parsedProspects = Array.isArray(parsed.prospects) ? parsed.prospects : [];
     const rejected = { invalidSource: 0, missingCompany: 0 };
-    const prospects = parsedProspects.slice(0, 18).flatMap((p: any) => {
+    let prospects = parsedProspects.slice(0, 18).flatMap((p: any) => {
       const sourceIndex = Number(p.sourceIndex);
       const source = Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < rawItems.length
         ? rawItems[sourceIndex] : rawItems.find((item) => item.link === String(p.sourceUrl || ''));
@@ -116,6 +132,31 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
         fit_reason: (typeof p.fitReason === 'string' ? p.fitReason : 'Potential match based on indexed search results.').slice(0, 500)
       }];
     });
+    if (!prospects.length) {
+      const intentPattern = /\\b(looking for|need(?:s|ed)?|seeking|request(?:ing|ed)?|rfp|hire(?:d|s|ing)?|freelance(?:r|rs)?|web project|website redesign|website design project|web development project|proposal)\\b/i;
+      const servicePattern = /\\b(website|web design|web developer|web development|redesign|digital agency|design agency)\\b/i;
+      const used = new Set<string>();
+      prospects = rawItems.flatMap((source) => {
+        const evidence = source.title + ' ' + source.description;
+        if (!intentPattern.test(evidence) || !servicePattern.test(evidence)) return [];
+        const normalized = source.link.split('#')[0].replace(/\\/$/, '').toLowerCase();
+        if (used.has(normalized)) return [];
+        used.add(normalized);
+        let host = 'Public opportunity';
+        try { host = new URL(source.link).hostname.replace(/^www\\./i, ''); } catch {}
+        const titleName = source.title.split(/\\s[|–—]\\s|\\s-\\s/)[0].trim();
+        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);
+        return [{
+          business_id: businessId, search_query: query,
+          company_name: (titleName.length >= 3 ? titleName : host).slice(0, 160),
+          contact_name: null, email: emailMatch ? emailMatch[0].toLowerCase() : null,
+          website: null, source_url: source.link, source_title: source.title.slice(0, 300),
+          description: (source.description || source.title).slice(0, 1000),
+          fit_score: 60,
+          fit_reason: 'Public search result contains website-service and request/need language. Verify the original post and whether the opportunity is still active before contacting.'
+        }];
+      }).slice(0, 12);
+    }
     console.info('Lead qualification summary:', JSON.stringify({ provider: searchResult.provider, rawResults: rawItems.length, aiCandidates: parsedProspects.length, accepted: prospects.length, rejected }));
     if (!prospects.length) return NextResponse.json({ prospects: [], message: 'The search provider returned pages, but the AI could not verify enough real business matches. Try a narrower industry, location, or service keyword.' });
     const insertResponse = await fetch(url + '/rest/v1/prospects?on_conflict=business_id,source_url', {
@@ -128,7 +169,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       console.error('Prospect save failed:', insertResponse.status, saved);
       return NextResponse.json({ error: 'Prospects were found, but could not be saved to your workspace.' }, { status: 502 });
     }
-    return NextResponse.json({ prospects: saved, count: saved.length, message: 'Search completed. Review each prospect and verify details before contacting them.' });
+    return NextResponse.json({ prospects: saved, count: saved.length, message: 'Search completed. Review each source and verify the business, buying intent and contact details before contacting them.' });
   } catch (error) {
     console.error('Lead search route failed:', error);
     return NextResponse.json({ error: error instanceof Error && error.name === 'TimeoutError' ? 'The search took too long. Try again.' : 'Lead search could not be completed.' }, { status: 500 });
