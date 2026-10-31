@@ -157,7 +157,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
         if (companyName.length < 3 || /^(?:home|homepage|services|blog|news|request|website|web design)$/i.test(companyName)) { rejectedNonBusiness++; return []; }
         const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
         return [{
-          business_id: businessId, search_query: query, normalized_domain: (() => { try { return new URL(source.link).hostname.toLowerCase().replace(/^www\\./, ''); } catch { return null; } })(), company_name: companyName.slice(0, 160),
+          business_id: businessId, search_query: query, normalized_domain: (() => { try { return new URL(source.link).hostname.toLowerCase().replace(/^www[.]/, ''); } catch { return null; } })(), company_name: companyName.slice(0, 160),
           contact_name: null, email: emailMatch ? emailMatch[0].toLowerCase() : null,
           website: null, source_url: source.link, source_title: source.title.slice(0, 300),
           description: (source.description || source.title).slice(0, 1000), fit_score: 65,
