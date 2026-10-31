@@ -9,14 +9,12 @@ function xmlItems(xml: string) {
   return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((match) => {
     const block = match[1];
     const get = (tag: string) => {
-      const found = block.match(new RegExp('<' + tag + '>([\s\\S]*?)<\/' + tag + '>', 'i'));
+      const found = block.match(new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>', 'i'));
       return found ? clean(found[1].replace(/^<!\[CDATA\[|\]\]>$/g, '')) : '';
     };
     return { title: get('title'), link: get('link'), description: get('description') };
   }).filter((item) => item.title && /^https?:\/\//i.test(item.link));
 }
-
-
 function decodeHtml(value: string) {
   return value.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }
@@ -27,17 +25,19 @@ async function searchPublicWeb(searchText: string) {
     if (response.ok) {
       const items = xmlItems(await response.text());
       if (items.length) return { items, provider: 'Bing' };
+    } else {
+      console.warn('Bing lead search returned HTTP', response.status);
     }
   } catch (error) { console.warn('Bing lead search unavailable:', error instanceof Error ? error.message : 'unknown error'); }
   try {
     const response = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(searchText), { headers, cache: 'no-store', signal: AbortSignal.timeout(12000) });
     if (!response.ok) throw new Error('DuckDuckGo returned HTTP ' + response.status);
     const html = await response.text();
-    const items = [...html.matchAll(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\\S]*?)<\/a>/gi)].map((m) => {
+    const items = [...html.matchAll(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)].map((m) => {
       let link = decodeHtml(m[1]);
       try { const parsed = new URL(link); if (parsed.hostname.includes('duckduckgo.com')) link = parsed.searchParams.get('uddg') || link; } catch {}
       const after = html.slice((m.index || 0), (m.index || 0) + 5000);
-      const snippet = after.match(/class="result__snippet"[^>]*>([\s\\S]*?)<\/[^>]+>/i)?.[1] || '';
+      const snippet = after.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/[^>]+>/i)?.[1] || '';
       return { title: clean(decodeHtml(m[2])), link, description: clean(decodeHtml(snippet)) };
     }).filter((x) => x.title && /^https?:\/\//i.test(x.link));
     if (items.length) return { items, provider: 'DuckDuckGo' };
