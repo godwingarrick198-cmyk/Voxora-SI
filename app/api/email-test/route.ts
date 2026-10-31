@@ -4,14 +4,21 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    const token = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '');
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const apiKey = process.env.BREVO_API_KEY;
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+
     if (!token || !supabaseUrl || !supabaseAnonKey) {
       return NextResponse.json({ error: 'Please sign in again before testing email.' }, { status: 401 });
     }
-    if (!apiKey) return NextResponse.json({ error: 'Brevo is not configured on the server.' }, { status: 503 });
+    if (!gmailUser || !gmailAppPassword) {
+      return NextResponse.json({ error: 'Gmail is not configured. Check GMAIL_USER and GMAIL_APP_PASSWORD in Vercel.' }, { status: 503 });
+    }
+    if (gmailUser.toLowerCase() !== 'pixelpulsestudio777@gmail.com') {
+      return NextResponse.json({ error: 'The configured Gmail sender does not match the approved Vexora sender.' }, { status: 503 });
+    }
 
     const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${token}` },
@@ -22,44 +29,35 @@ export async function POST(request: NextRequest) {
     const recipient = typeof user.email === 'string' ? user.email : '';
     if (!recipient) return NextResponse.json({ error: 'Your account has no email address to receive the test.' }, { status: 400 });
 
-    const sendersResponse = await fetch('https://api.brevo.com/v3/senders?limit=50&offset=0', {
-      headers: { accept: 'application/json', 'api-key': apiKey },
-      cache: 'no-store'
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: gmailUser, pass: gmailAppPassword },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
     });
-    const sendersPayload = await sendersResponse.json().catch(() => ({}));
-    if (!sendersResponse.ok) {
-      console.error('Brevo sender lookup failed:', sendersResponse.status, sendersPayload?.message);
-      const detail = typeof sendersPayload?.message === 'string' ? sendersPayload.message : typeof sendersPayload?.code === 'string' ? sendersPayload.code : 'No error detail returned';
-      return NextResponse.json({ error: 'Brevo sender lookup failed (HTTP ' + sendersResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 });
-    }
-    const senders = Array.isArray(sendersPayload?.senders) ? sendersPayload.senders : [];
-    const sender = senders.find((item: any) => item.active === true && typeof item.email === 'string');
-    if (!sender) {
-      return NextResponse.json({ error: 'Brevo API key is accepted, but there is no active verified sender. Verify a sender email in Brevo, then test again.' }, { status: 409 });
-    }
 
-    const messageResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: { accept: 'application/json', 'content-type': 'application/json', 'api-key': apiKey },
-      body: JSON.stringify({
-        sender: { email: sender.email, name: sender.name || 'Vexora SI' },
-        to: [{ email: recipient }],
-        subject: 'Vexora SI email connection test',
-        textContent: 'Your Vexora SI workspace has successfully sent this test email through Brevo. Transactional email delivery is connected.',
-        htmlContent: '<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#202033"><h2>Vexora SI email test</h2><p>Your Vexora SI workspace has successfully sent this test email through Brevo.</p><p>Transactional email delivery is connected.</p></div>',
-        tags: ['vexora-email-test']
-      }),
-      signal: AbortSignal.timeout(20000)
-    });
-    const messagePayload = await messageResponse.json().catch(() => ({}));
-    if (!messageResponse.ok) {
-      console.error('Brevo send failed:', messageResponse.status, messagePayload?.message);
-      const detail = typeof messagePayload?.message === 'string' ? messagePayload.message : typeof messagePayload?.code === 'string' ? messagePayload.code : 'No error detail returned';
-      return NextResponse.json({ error: 'Brevo send failed (HTTP ' + messageResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 });
+    try {
+      const sent = await transporter.sendMail({
+        from: { name: 'Pixel Pulse Studio', address: gmailUser },
+        to: recipient,
+        replyTo: gmailUser,
+        subject: 'Vexora SI Gmail connection test',
+        text: 'Your Vexora SI workspace successfully sent this test email through Gmail SMTP.'
+      });
+      return NextResponse.json({ ok: true, recipient, messageId: sent.messageId });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown SMTP error';
+      console.error('Gmail SMTP test failed:', detail);
+      return NextResponse.json({ error: 'Gmail could not send the test email. Check the app password and Gmail sending limits.' }, { status: 502 });
+    } finally {
+      transporter.close();
     }
-    return NextResponse.json({ ok: true, recipient, messageId: messagePayload?.messageId || null });
   } catch (error) {
-    console.error('Brevo email test failed:', error);
-    return NextResponse.json({ error: 'The email test could not be completed. Please try again.' }, { status: 500 });
+    console.error('Gmail email test route failed:', error);
+    return NextResponse.json({ error: 'The Gmail test could not be completed. Please try again.' }, { status: 500 });
   }
 }
