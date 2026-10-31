@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const gmailUser = process.env.GMAIL_USER;
-    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
 
     if (!token || !supabaseUrl || !supabaseAnonKey) {
       return NextResponse.json({ error: 'Please sign in again before testing email.' }, { status: 401 });
@@ -50,9 +50,13 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ ok: true, recipient, messageId: sent.messageId });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Unknown SMTP error';
-      console.error('Gmail SMTP test failed:', detail);
-      return NextResponse.json({ error: 'Gmail could not send the test email. Check the app password and Gmail sending limits.' }, { status: 502 });
+      const smtpError = error as { message?: string; responseCode?: number; code?: string };
+      const detail = smtpError?.message || 'Unknown SMTP error';
+      console.error('Gmail SMTP test failed:', { responseCode: smtpError?.responseCode, code: smtpError?.code, message: detail });
+      if (smtpError?.responseCode === 535 || /BadCredentials|Username and Password not accepted/i.test(detail)) {
+        return NextResponse.json({ error: 'Gmail rejected the app password (535). Create a fresh Google App Password for pixelpulsestudio777@gmail.com, update GMAIL_APP_PASSWORD in Vercel, and redeploy.' }, { status: 502 });
+      }
+      return NextResponse.json({ error: 'Gmail could not send the test email. Check Gmail SMTP access and sending limits.' }, { status: 502 });
     } finally {
       transporter.close();
     }
