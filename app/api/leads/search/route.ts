@@ -138,7 +138,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       const used = new Set<string>();
       prospects = rawItems.flatMap((source) => {
         const evidence = source.title + ' ' + source.description;
-        if (!intentPattern.test(evidence) || !servicePattern.test(evidence)) return [];
+        if (!intentPattern.test(evidence) && !servicePattern.test(evidence)) return [];
         const normalized = source.link.split('#')[0].replace(/\/$/, '').toLowerCase();
         if (used.has(normalized)) return [];
         used.add(normalized);
@@ -153,7 +153,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
           website: null, source_url: source.link, source_title: source.title.slice(0, 300),
           description: (source.description || source.title).slice(0, 1000),
           fit_score: 60,
-          fit_reason: 'Public search result contains website-service and request/need language. Verify the original post and whether the opportunity is still active before contacting.'
+          fit_reason: 'Search-result match based on service or request language. This is an unverified potential prospect; confirm the business identity and active buying intent from the source before contacting.'
         }];
       }).slice(0, 12);
     }
