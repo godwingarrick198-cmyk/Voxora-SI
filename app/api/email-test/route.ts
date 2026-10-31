@@ -26,10 +26,11 @@ export async function POST(request: NextRequest) {
       headers: { accept: 'application/json', 'api-key': apiKey },
       cache: 'no-store'
     });
-    const sendersPayload = await sendersResponse.json();
+    const sendersPayload = await sendersResponse.json().catch(() => ({}));
     if (!sendersResponse.ok) {
       console.error('Brevo sender lookup failed:', sendersResponse.status, sendersPayload?.message);
-      return NextResponse.json({ error: 'Brevo could not verify the account or sender settings. Check the API key and Brevo account.' }, { status: 502 });
+      const detail = typeof sendersPayload?.message === 'string' ? sendersPayload.message : typeof sendersPayload?.code === 'string' ? sendersPayload.code : 'No error detail returned';
+      return NextResponse.json({ error: 'Brevo sender lookup failed (HTTP ' + sendersResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 });
     }
     const senders = Array.isArray(sendersPayload?.senders) ? sendersPayload.senders : [];
     const sender = senders.find((item: any) => item.active === true && typeof item.email === 'string');
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
     const messagePayload = await messageResponse.json().catch(() => ({}));
     if (!messageResponse.ok) {
       console.error('Brevo send failed:', messageResponse.status, messagePayload?.message);
-      return NextResponse.json({ error: 'Brevo rejected the test email. Check sender verification and transactional email activation in Brevo.' }, { status: 502 });
+      const detail = typeof messagePayload?.message === 'string' ? messagePayload.message : typeof messagePayload?.code === 'string' ? messagePayload.code : 'No error detail returned';
+      return NextResponse.json({ error: 'Brevo send failed (HTTP ' + messageResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 });
     }
     return NextResponse.json({ ok: true, recipient, messageId: messagePayload?.messageId || null });
   } catch (error) {
