@@ -52,7 +52,7 @@ export default function DashboardClient(){
    const response=await fetch('/api/email-test',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`}});
    const data=await response.json();
    if(!response.ok)throw new Error(data.error||'Email test failed.');
-   setEmailStatus(`Test email accepted by Brevo and sent to ${data.recipient}. Check your inbox and spam folder.`);
+   setEmailStatus(`Test email sent through Gmail to ${data.recipient}. Check your inbox and spam folder.`);
   }catch(e){setError(e instanceof Error?e.message:'Email test failed.');}
   finally{setEmailBusy(false);}
  }
@@ -78,7 +78,7 @@ export default function DashboardClient(){
   </div>
   {business&&<LeadGeneration businessId={business.id} businessName={business.name}/>}
 
-  <section style={{...card,marginTop:18}}><div className="vx-section-head"><div><h2 className="vx-title">Email delivery</h2><p style={muted}>Transactional email through Brevo.</p></div><span className="vx-status">BREVO CONNECTED</span></div><p style={muted}>Send a real test email to your signed-in account ({email}). This checks your Brevo API connection and active sender configuration.</p><button type="button" style={primary} disabled={emailBusy||!email} onClick={()=>void testEmail()}>{emailBusy?'Sending test…':'Send test email to my inbox'}</button>{emailStatus&&<p role="status" style={{...muted,color:'#16834a',marginBottom:0}}>{emailStatus}</p>}</section>
+  <section style={{...card,marginTop:18}}><div className="vx-section-head"><div><h2 className="vx-title">Email delivery</h2><p style={muted}>Transactional email through Gmail SMTP.</p></div><span className="vx-status">GMAIL SMTP</span></div><p style={muted}>Send a real test email to your signed-in account ({email}). This checks your Gmail SMTP connection and sender configuration.</p><button type="button" style={primary} disabled={emailBusy||!email} onClick={()=>void testEmail()}>{emailBusy?'Sending test…':'Send test email to my inbox'}</button>{emailStatus&&<p role="status" style={{...muted,color:'#16834a',marginBottom:0}}>{emailStatus}</p>}</section>
   {error&&<div className="vx-error" role="alert">{error}</div>}<footer className="vx-footer">Vexora SI · Business workspace · Your data stays in your account</footer>
  </div></main>;
 }
