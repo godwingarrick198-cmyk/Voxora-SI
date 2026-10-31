@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'Brevo sending is not configured.' }, { status: 503 });
     const senderResponse = await fetch('https://api.brevo.com/v3/senders?limit=50&offset=0', { headers: { accept: 'application/json', 'api-key': apiKey }, cache: 'no-store' });
-    const senderPayload = await senderResponse.json();
-    if (!senderResponse.ok) return NextResponse.json({ error: 'Brevo sender settings could not be checked.' }, { status: 502 });
+    const senderPayload = await senderResponse.json().catch(() => ({}));
+    if (!senderResponse.ok) { const detail = typeof senderPayload?.message === 'string' ? senderPayload.message : typeof senderPayload?.code === 'string' ? senderPayload.code : 'No error detail returned'; return NextResponse.json({ error: 'Brevo sender lookup failed (HTTP ' + senderResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 }); }
     const sender = (Array.isArray(senderPayload?.senders) ? senderPayload.senders : []).find((s: any) => s.active === true && typeof s.email === 'string');
     if (!sender) return NextResponse.json({ error: 'Verify an active sender address in Brevo before sending.' }, { status: 409 });
     const sendResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(20000)
     });
     const sendPayload = await sendResponse.json().catch(() => ({}));
-    if (!sendResponse.ok) return NextResponse.json({ error: 'Brevo rejected the message. Check account sending status and sender verification.' }, { status: 502 });
+    if (!sendResponse.ok) { const detail = typeof sendPayload?.message === 'string' ? sendPayload.message : typeof sendPayload?.code === 'string' ? sendPayload.code : 'No error detail returned'; console.error('Brevo outreach send failed:', sendResponse.status, detail); return NextResponse.json({ error: 'Brevo send failed (HTTP ' + sendResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 }); }
     const logResponse = await fetch(auth.url + '/rest/v1/prospect_messages', {
       method: 'POST', headers: { apikey: auth.anon, Authorization: 'Bearer ' + auth.token, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ business_id: prospect.business_id, prospect_id: prospect.id, direction: 'outbound', subject, body: message, provider_message_id: sendPayload?.messageId || null, delivery_status: 'sent' })
