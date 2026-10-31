@@ -57,20 +57,38 @@ export async function POST(request: NextRequest) {
     const priorMessages = await priorResponse.json();
     if (!priorResponse.ok) return NextResponse.json({ error: 'Could not verify previous outreach history. Sending was stopped for safety.' }, { status: 502 });
     if (Array.isArray(priorMessages) && priorMessages.length) return NextResponse.json({ error: 'An email has already been sent to this prospect from Vexora. Review the message history before sending again.' }, { status: 409 });
-    const apiKey = process.env.BREVO_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'Brevo sending is not configured.' }, { status: 503 });
-    const senderResponse = await fetch('https://api.brevo.com/v3/senders?limit=50&offset=0', { headers: { accept: 'application/json', 'api-key': apiKey }, cache: 'no-store' });
-    const senderPayload = await senderResponse.json().catch(() => ({}));
-    if (!senderResponse.ok) { const detail = typeof senderPayload?.message === 'string' ? senderPayload.message : typeof senderPayload?.code === 'string' ? senderPayload.code : 'No error detail returned'; return NextResponse.json({ error: 'Brevo sender lookup failed (HTTP ' + senderResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 }); }
-    const sender = (Array.isArray(senderPayload?.senders) ? senderPayload.senders : []).find((s: any) => s.active === true && typeof s.email === 'string');
-    if (!sender) return NextResponse.json({ error: 'Verify an active sender address in Brevo before sending.' }, { status: 409 });
-    const sendResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST', headers: { accept: 'application/json', 'content-type': 'application/json', 'api-key': apiKey },
-      body: JSON.stringify({ sender: { email: sender.email, name: sender.name || 'Vexora' }, to: [{ email }], subject, textContent: message, tags: ['vexora-outreach'] }),
-      signal: AbortSignal.timeout(20000)
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+    if (!gmailUser || !gmailAppPassword) return NextResponse.json({ error: 'Gmail sending is not configured. Add GMAIL_APP_PASSWORD in Vercel.' }, { status: 503 });
+    if (gmailUser.toLowerCase() !== 'pixelpulsestudio777@gmail.com') return NextResponse.json({ error: 'The configured Gmail sender does not match the approved Vexora sender.' }, { status: 503 });
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: gmailUser, pass: gmailAppPassword },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
     });
-    const sendPayload = await sendResponse.json().catch(() => ({}));
-    if (!sendResponse.ok) { const detail = typeof sendPayload?.message === 'string' ? sendPayload.message : typeof sendPayload?.code === 'string' ? sendPayload.code : 'No error detail returned'; console.error('Brevo outreach send failed:', sendResponse.status, detail); return NextResponse.json({ error: 'Brevo send failed (HTTP ' + sendResponse.status + '): ' + detail.slice(0, 220) }, { status: 502 }); }
+    let sendPayload: { messageId?: string };
+    try {
+      const sent = await transporter.sendMail({
+        from: { name: 'Pixel Pulse Studio', address: gmailUser },
+        to: email,
+        replyTo: gmailUser,
+        subject,
+        text: message,
+        headers: { 'X-Mailer': 'Vexora SI' }
+      });
+      sendPayload = { messageId: sent.messageId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown SMTP error';
+      console.error('Gmail SMTP outreach failed:', detail);
+      return NextResponse.json({ error: 'Gmail could not send this email. Check the Gmail app password and account sending limits.' }, { status: 502 });
+    } finally {
+      transporter.close();
+    }
     const logResponse = await fetch(auth.url + '/rest/v1/prospect_messages', {
       method: 'POST', headers: { apikey: auth.anon, Authorization: 'Bearer ' + auth.token, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ business_id: prospect.business_id, prospect_id: prospect.id, direction: 'outbound', subject, body: message, provider_message_id: sendPayload?.messageId || null, delivery_status: 'sent' })
