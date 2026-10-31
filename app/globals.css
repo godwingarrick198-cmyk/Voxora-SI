@@ -8,6 +8,8 @@
 @media(max-width:600px){.theme-toggle{padding:9px;width:36px;height:36px;justify-content:center}.theme-toggle span{display:none}}
 
 /* Vexora SI responsive dashboard */
+.vx-shell{--line:var(--vx-line);--field:var(--vx-field);--text:var(--vx-text);--muted:var(--vx-muted);--card:var(--vx-card)}
+
 :root{--vx-bg:#f5f6fb;--vx-card:#fff;--vx-text:#202139;--vx-muted:#777b91;--vx-line:#e7e9f1;--vx-field:#fff}
 html[data-theme="dark"]{--vx-bg:#0b1020;--vx-card:#121b2d;--vx-text:#f3f5fb;--vx-muted:#a5b0c4;--vx-line:#29364c;--vx-field:#0d1524;color-scheme:dark}
 .vx-shell{min-height:100vh;background:var(--vx-bg);color:var(--vx-text);padding:22px clamp(12px,3vw,42px) 44px;font-family:Arial,sans-serif;transition:background .2s,color .2s}
