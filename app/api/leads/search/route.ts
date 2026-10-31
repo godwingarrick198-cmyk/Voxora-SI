@@ -3,22 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 function clean(value: string) {
-  return value.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\\s+/g, ' ').trim();
+  return value.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
 }
 function xmlItems(xml: string) {
-  return [...xml.matchAll(/<item>([\\s\\S]*?)<\\/item>/gi)].map((match) => {
+  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((match) => {
     const block = match[1];
     const get = (tag: string) => {
-      const found = block.match(new RegExp('<' + tag + '>([\\s\\S]*?)<\\/' + tag + '>', 'i'));
-      return found ? clean(found[1].replace(/^<!\\[CDATA\\[|\\]\\]>$/g, '')) : '';
+      const found = block.match(new RegExp('<' + tag + '>([\s\S]*?)<\/' + tag + '>', 'i'));
+      return found ? clean(found[1].replace(/^<!\[CDATA\[|\]\]>$/g, '')) : '';
     };
     return { title: get('title'), link: get('link'), description: get('description') };
-  }).filter((item) => item.title && /^https?:\\/\\//i.test(item.link));
+  }).filter((item) => item.title && /^https?:\/\//i.test(item.link));
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '');
+    const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
@@ -65,12 +65,12 @@ Supplied results: ${JSON.stringify(rawItems)}`;
     const prospects = (Array.isArray(parsed.prospects) ? parsed.prospects : []).slice(0, 12).flatMap((p: any) => {
       const source = sourceMap.get(String(p.sourceUrl || ''));
       if (!source || typeof p.companyName !== 'string' || !p.companyName.trim()) return [];
-      const email = typeof p.email === 'string' && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i.test(p.email) &&
+      const email = typeof p.email === 'string' && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(p.email) &&
         (source.title + ' ' + source.description).toLowerCase().includes(p.email.toLowerCase()) ? p.email.toLowerCase() : null;
       return [{
         business_id: businessId, search_query: query, company_name: p.companyName.trim().slice(0, 160),
         contact_name: typeof p.contactName === 'string' ? p.contactName.slice(0, 120) : null,
-        email, website: typeof p.website === 'string' && /^https?:\\/\\//i.test(p.website) ? p.website.slice(0, 500) : null,
+        email, website: typeof p.website === 'string' && /^https?:\/\//i.test(p.website) ? p.website.slice(0, 500) : null,
         source_url: source.link, source_title: source.title.slice(0, 300),
         description: (typeof p.description === 'string' ? p.description : source.description).slice(0, 1000),
         fit_score: Math.max(0, Math.min(100, Number(p.fitScore) || 50)),
