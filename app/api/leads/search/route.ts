@@ -133,19 +133,19 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       }];
     });
     if (!prospects.length) {
-      const intentPattern = /\\b(looking for|need(?:s|ed)?|seeking|request(?:ing|ed)?|rfp|hire(?:d|s|ing)?|freelance(?:r|rs)?|web project|website redesign|website design project|web development project|proposal)\\b/i;
-      const servicePattern = /\\b(website|web design|web developer|web development|redesign|digital agency|design agency)\\b/i;
+      const intentPattern = /\b(looking for|need(?:s|ed)?|seeking|request(?:ing|ed)?|rfp|hire(?:d|s|ing)?|freelance(?:r|rs)?|web project|website redesign|website design project|web development project|proposal)\b/i;
+      const servicePattern = /\b(website|web design|web developer|web development|redesign|digital agency|design agency)\b/i;
       const used = new Set<string>();
       prospects = rawItems.flatMap((source) => {
         const evidence = source.title + ' ' + source.description;
         if (!intentPattern.test(evidence) || !servicePattern.test(evidence)) return [];
-        const normalized = source.link.split('#')[0].replace(/\\/$/, '').toLowerCase();
+        const normalized = source.link.split('#')[0].replace(/\/$/, '').toLowerCase();
         if (used.has(normalized)) return [];
         used.add(normalized);
         let host = 'Public opportunity';
-        try { host = new URL(source.link).hostname.replace(/^www\\./i, ''); } catch {}
-        const titleName = source.title.split(/\\s[|–—]\\s|\\s-\\s/)[0].trim();
-        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);
+        try { host = new URL(source.link).hostname.replace(/^www\./i, ''); } catch {}
+        const titleName = source.title.split(/\s[|–—]\s|\s-\s/)[0].trim();
+        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
         return [{
           business_id: businessId, search_query: query,
           company_name: (titleName.length >= 3 ? titleName : host).slice(0, 160),
