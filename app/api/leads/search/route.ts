@@ -127,7 +127,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       const email = emailMatch && (!suppliedEmail || suppliedEmail.toLowerCase() === emailMatch[0].toLowerCase())
         ? emailMatch[0].toLowerCase() : null;
       return [{
-        business_id: businessId, search_query: query, company_name: p.companyName.trim().slice(0, 160),
+        business_id: businessId, search_query: query, normalized_domain: (() => { try { return new URL(source.link).hostname.toLowerCase().replace(/^www\\./, ''); } catch { return null; } })(), company_name: p.companyName.trim().slice(0, 160),
         contact_name: typeof p.contactName === 'string' ? p.contactName.slice(0, 120) : null,
         email, website: typeof p.website === 'string' && /^https?:\/\//i.test(p.website) ? p.website.slice(0, 500) : null,
         source_url: source.link, source_title: source.title.slice(0, 300),
@@ -157,7 +157,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
         if (companyName.length < 3 || /^(?:home|homepage|services|blog|news|request|website|web design)$/i.test(companyName)) { rejectedNonBusiness++; return []; }
         const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
         return [{
-          business_id: businessId, search_query: query, company_name: companyName.slice(0, 160),
+          business_id: businessId, search_query: query, normalized_domain: (() => { try { return new URL(source.link).hostname.toLowerCase().replace(/^www\\./, ''); } catch { return null; } })(), company_name: companyName.slice(0, 160),
           contact_name: null, email: emailMatch ? emailMatch[0].toLowerCase() : null,
           website: null, source_url: source.link, source_title: source.title.slice(0, 300),
           description: (source.description || source.title).slice(0, 1000), fit_score: 65,
@@ -168,6 +168,15 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
     }
     console.info('Lead qualification summary:', JSON.stringify({ provider: searchResult.provider, rawResults: rawItems.length, aiCandidates: parsedProspects.length, accepted: prospects.length, rejected }));
     if (!prospects.length) return NextResponse.json({ prospects: [], message: 'The search provider returned pages, but the AI could not verify enough real business matches. Try a narrower industry, location, or service keyword.' });
+    const candidateDomains = [...new Set(prospects.map((p: any) => p.normalized_domain).filter(Boolean))];
+    if (candidateDomains.length) {
+      const domainFilter = 'in.(' + candidateDomains.map((d: string) => '"' + d.replace(/"/g, '') + '"').join(',') + ')';
+      const existingResponse = await fetch(url + '/rest/v1/prospects?business_id=eq.' + encodeURIComponent(businessId) + '&normalized_domain=' + encodeURIComponent(domainFilter) + '&select=normalized_domain', { headers: { apikey: anon, Authorization: 'Bearer ' + token }, cache: 'no-store' });
+      const existingRows = await existingResponse.json().catch(() => []);
+      const existingDomains = new Set(Array.isArray(existingRows) ? existingRows.map((row: any) => row.normalized_domain) : []);
+      prospects = prospects.filter((p: any) => !p.normalized_domain || !existingDomains.has(p.normalized_domain));
+    }
+    if (!prospects.length) return NextResponse.json({ prospects: [], message: 'These businesses were already saved in this workspace. No duplicates were added.' });
     const insertResponse = await fetch(url + '/rest/v1/prospects?on_conflict=business_id,source_url', {
       method: 'POST',
       headers: { apikey: anon, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
