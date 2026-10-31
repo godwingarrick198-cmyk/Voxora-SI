@@ -4,7 +4,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '');
+    const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const gmailUser = process.env.GMAIL_USER;
