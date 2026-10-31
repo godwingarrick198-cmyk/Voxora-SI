@@ -116,6 +116,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       const source = Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < rawItems.length
         ? rawItems[sourceIndex] : rawItems.find((item) => item.link === String(p.sourceUrl || ''));
       if (!source) { rejected.invalidSource++; return []; }
+      if (/dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|\\.gov/i.test(source.link) || /definition|meaning|synonyms|antonyms|dictionary|thesaurus/i.test(source.title)) { rejected.invalidSource++; return []; }
       if (typeof p.companyName !== 'string' || !p.companyName.trim()) { rejected.missingCompany++; return []; }
       const sourceText = source.title + ' ' + source.description;
       const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
