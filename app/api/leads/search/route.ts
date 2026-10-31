@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
       [query, '"hire a web designer" OR "hire a website designer" OR "web development project"', country, exclusions].filter(Boolean).join(' '),
       [query, '"request for proposal" OR "request a quote" OR "RFP for website"', country, exclusions].filter(Boolean).join(' '),
       [query, '"website redesign project" OR "seeking web design" OR "need a new website"', country, exclusions].filter(Boolean).join(' ')
-    ];    const searchRuns = await Promise.allSettled(intentSearches.map((text) => searchPublicWeb(text)));
+    ];
+    const searchRuns = await Promise.allSettled(intentSearches.map((text) => searchPublicWeb(text)));
     const successfulRuns = searchRuns.flatMap((run) => run.status === 'fulfilled' ? [run.value] : []);
     if (!successfulRuns.length) throw new Error('Search providers did not return usable results. Try again shortly.');
     const seenUrls = new Set<string>();
