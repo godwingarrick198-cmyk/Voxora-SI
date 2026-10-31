@@ -102,7 +102,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       if (!source) { rejected.invalidSource++; return []; }
       if (typeof p.companyName !== 'string' || !p.companyName.trim()) { rejected.missingCompany++; return []; }
       const sourceText = source.title + ' ' + source.description;
-      const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);
+      const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
       const suppliedEmail = typeof p.email === 'string' ? p.email.trim() : '';
       const email = emailMatch && (!suppliedEmail || suppliedEmail.toLowerCase() === emailMatch[0].toLowerCase())
         ? emailMatch[0].toLowerCase() : null;
