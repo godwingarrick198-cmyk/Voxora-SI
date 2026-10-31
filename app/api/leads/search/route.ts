@@ -71,13 +71,13 @@ export async function POST(request: NextRequest) {
     if (!businessResponse.ok || !Array.isArray(businesses) || !businesses[0]) return NextResponse.json({ error: 'Business workspace not found or access denied.' }, { status: 403 });
 
     const searchText = [query, country ? 'in ' + country : ''].filter(Boolean).join(' ');
+    const exclusions = '-dictionary -definition -thesaurus -synonyms -meaning -wikipedia';
     const intentSearches = [
-      searchText,
-      [query, '"looking for" OR "need" OR "seeking" OR "request for proposal"', country].filter(Boolean).join(' '),
-      [query, '"hire" OR "freelance" OR "web project" OR "website redesign"', country].filter(Boolean).join(' '),
-      ['"request for proposal" OR "RFP"', query, country].filter(Boolean).join(' ')
-    ];
-    const searchRuns = await Promise.allSettled(intentSearches.map((text) => searchPublicWeb(text)));
+      [searchText, '"actively looking for" OR "looking to hire"', exclusions].filter(Boolean).join(' '),
+      [query, '"hire a web designer" OR "hire a website designer" OR "web development project"', country, exclusions].filter(Boolean).join(' '),
+      [query, '"request for proposal" OR "request a quote" OR "RFP for website"', country, exclusions].filter(Boolean).join(' '),
+      [query, '"website redesign project" OR "seeking web design" OR "need a new website"', country, exclusions].filter(Boolean).join(' ')
+    ];    const searchRuns = await Promise.allSettled(intentSearches.map((text) => searchPublicWeb(text)));
     const successfulRuns = searchRuns.flatMap((run) => run.status === 'fulfilled' ? [run.value] : []);
     if (!successfulRuns.length) throw new Error('Search providers did not return usable results. Try again shortly.');
     const seenUrls = new Set<string>();
@@ -133,29 +133,34 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       }];
     });
     if (!prospects.length) {
-      const intentPattern = /\b(looking for|need(?:s|ed)?|seeking|request(?:ing|ed)?|rfp|hire(?:d|s|ing)?|freelance(?:r|rs)?|web project|website redesign|website design project|web development project|proposal)\b/i;
-      const servicePattern = /\b(website|web design|web developer|web development|redesign|digital agency|design agency)\b/i;
+      // Never treat generic words such as "request" or "website" as buying intent.
+      const intentPattern = /\\b(?:actively looking for|looking to hire|seeking a web designer|seeking website design|need a new website|need a website designer|hire a web designer|hire a website designer|request a quote for website design|request a web design quote|request for proposal|request for quotation|rfp for (?:web|website)|website redesign project|web design project)\\b/i;
+      const servicePattern = /\\b(?:website design|web design|web development|website redesign|web designer|website designer|web developer)\\b/i;
+      const excludedHost = /(?:^|\\.)(?:dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|pa\\.gov|usa\\.gov)(?:\\.|$)/i;
+      const excludedTitle = /\\b(?:definition|meaning|synonyms?|antonyms?|dictionary|thesaurus)\\b/i;
       const used = new Set<string>();
+      let rejectedNoIntent = 0, rejectedNonBusiness = 0;
       prospects = rawItems.flatMap((source) => {
         const evidence = source.title + ' ' + source.description;
-        if (!intentPattern.test(evidence) && !servicePattern.test(evidence)) return [];
-        const normalized = source.link.split('#')[0].replace(/\/$/, '').toLowerCase();
+        let host = '';
+        try { host = new URL(source.link).hostname.replace(/^www\\./i, ''); } catch {}
+        if (!host || excludedHost.test(host) || excludedTitle.test(source.title)) { rejectedNonBusiness++; return []; }
+        if (!intentPattern.test(evidence) || !servicePattern.test(evidence)) { rejectedNoIntent++; return []; }
+        const normalized = source.link.split('#')[0].replace(/\\/$/, '').toLowerCase();
         if (used.has(normalized)) return [];
         used.add(normalized);
-        let host = 'Public opportunity';
-        try { host = new URL(source.link).hostname.replace(/^www\./i, ''); } catch {}
-        const titleName = source.title.split(/\s[|–—]\s|\s-\s/)[0].trim();
-        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+        const companyName = source.title.split(/\\s[|–—]\\s|\\s-\\s/)[0].trim();
+        if (companyName.length < 3 || /^(?:home|homepage|services|blog|news|request|website|web design)$/i.test(companyName)) { rejectedNonBusiness++; return []; }
+        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);
         return [{
-          business_id: businessId, search_query: query,
-          company_name: (titleName.length >= 3 ? titleName : host).slice(0, 160),
+          business_id: businessId, search_query: query, company_name: companyName.slice(0, 160),
           contact_name: null, email: emailMatch ? emailMatch[0].toLowerCase() : null,
           website: null, source_url: source.link, source_title: source.title.slice(0, 300),
-          description: (source.description || source.title).slice(0, 1000),
-          fit_score: 60,
-          fit_reason: 'Search-result match based on service or request language. This is an unverified potential prospect; confirm the business identity and active buying intent from the source before contacting.'
+          description: (source.description || source.title).slice(0, 1000), fit_score: 65,
+          fit_reason: 'The indexed source contains explicit, service-specific buying or hiring language. Verify that the opportunity is current before contacting.'
         }];
       }).slice(0, 12);
+      console.info('Lead fallback qualification:', JSON.stringify({rawResults:rawItems.length,accepted:prospects.length,rejectedNoExplicitIntent:rejectedNoIntent,rejectedNonBusiness}));
     }
     console.info('Lead qualification summary:', JSON.stringify({ provider: searchResult.provider, rawResults: rawItems.length, aiCandidates: parsedProspects.length, accepted: prospects.length, rejected }));
     if (!prospects.length) return NextResponse.json({ prospects: [], message: 'The search provider returned pages, but the AI could not verify enough real business matches. Try a narrower industry, location, or service keyword.' });
