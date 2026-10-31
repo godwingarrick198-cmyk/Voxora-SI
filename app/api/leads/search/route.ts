@@ -9,7 +9,7 @@ function xmlItems(xml: string) {
   return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((match) => {
     const block = match[1];
     const get = (tag: string) => {
-      const found = block.match(new RegExp('<' + tag + '>([\s\S]*?)<\/' + tag + '>', 'i'));
+      const found = block.match(new RegExp('<' + tag + '>([\\s\\S]*?)<\\/' + tag + '>', 'i'));
       return found ? clean(found[1].replace(/^<!\[CDATA\[|\]\]>$/g, '')) : '';
     };
     return { title: get('title'), link: get('link'), description: get('description') };
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const businesses = await businessResponse.json();
     if (!businessResponse.ok || !Array.isArray(businesses) || !businesses[0]) return NextResponse.json({ error: 'Business workspace not found or access denied.' }, { status: 403 });
 
-    const searchText = [query, country ? 'in ' + country : '', 'business OR company OR hiring OR looking for OR project'].filter(Boolean).join(' ');
+    const searchText = [query, country ? 'in ' + country : ''].filter(Boolean).join(' ');
     const rssUrl = 'https://www.bing.com/search?format=rss&q=' + encodeURIComponent(searchText);
     const searchResponse = await fetch(rssUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VexoraLeadFinder/1.0)' }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
     if (!searchResponse.ok) return NextResponse.json({ error: 'The search provider is temporarily unavailable. Try again shortly.' }, { status: 502 });
