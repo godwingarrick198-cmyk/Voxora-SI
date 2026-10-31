@@ -15,7 +15,7 @@ const primary:React.CSSProperties={border:0,borderRadius:10,padding:'12px 16px',
 const muted:React.CSSProperties={color:'var(--muted)',fontSize:13,lineHeight:1.6};
 export default function DashboardClient(){
  const router=useRouter();const db=createClient();const chatEnd=useRef<HTMLDivElement|null>(null);const recognition=useRef<any>(null);
- const [theme,setTheme]=useState<'light'|'dark'>('light'),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[email,setEmail]=useState('');
+ const [theme,setTheme]=useState<'light'|'dark'>('light'),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[email,setEmail]=useState(''),[emailBusy,setEmailBusy]=useState(false),[emailStatus,setEmailStatus]=useState('');
  const [business,setBusiness]=useState<Row|null>(null),[agent,setAgent]=useState<Row|null>(null),[leads,setLeads]=useState<Row[]>([]),[calls,setCalls]=useState<Row[]>([]);
  const [businessName,setBusinessName]=useState(''),[industry,setIndustry]=useState('other'),[phone,setPhone]=useState(''),[agentName,setAgentName]=useState('Nova'),[greeting,setGreeting]=useState('Thank you for calling. How can I help you today?'),[instructions,setInstructions]=useState('');
  const [messages,setMessages]=useState<ChatMessage[]>([]),[draft,setDraft]=useState(''),[chatBusy,setChatBusy]=useState(false),[listening,setListening]=useState(false),[voiceSupported,setVoiceSupported]=useState(false),[speakReplies,setSpeakReplies]=useState(true);
@@ -43,6 +43,18 @@ export default function DashboardClient(){
   else{const {data,error}=await db.from('receptionists').insert(values).select().single();if(error||!data){setError(error?.message||'Receptionist could not be saved.');setSaving(false);return;}setAgent(data);}
   setSaving(false);await load();
  }
+ async function testEmail(){
+  setEmailBusy(true);setEmailStatus('');setError('');
+  try{
+   const {data:{session}}=await db.auth.getSession();
+   if(!session?.access_token)throw new Error('Your session has expired. Sign in again.');
+   const response=await fetch('/api/email-test',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`}});
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error||'Email test failed.');
+   setEmailStatus(`Test email accepted by Brevo and sent to ${data.recipient}. Check your inbox and spam folder.`);
+  }catch(e){setError(e instanceof Error?e.message:'Email test failed.');}
+  finally{setEmailBusy(false);}
+ }
  async function logout(){await db.auth.signOut();router.replace('/login');router.refresh();}
  function speak(text:string){if(!speakReplies||typeof window==='undefined'||!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.rate=1;utterance.pitch=1;window.speechSynthesis.speak(utterance);}
  async function sendMessage(text=draft){
@@ -66,7 +78,7 @@ export default function DashboardClient(){
   <section style={{...card,marginTop:18}}><div className="vx-section-head"><div><h2 className="vx-title">Incoming phone service</h2><p style={muted}>Bring your existing business number and forward calls after telephony is connected.</p></div><span className="vx-status vx-status-off">NOT CONNECTED</span></div><p style={muted}>Vexora is not receiving real phone calls yet. A phone provider, webhook and live voice connection still need to be configured and tested.</p></section>
   <div className="vx-stats">{[['Saved leads',leads.length],['Call records',calls.length],['Receptionist',agent?'Configured':'Not configured']].map(([title,value])=><section key={String(title)} style={card}><div style={muted}>{title}</div><div className="vx-stat-value">{value}</div><small style={muted}>Live database records</small></section>)}</div>
   <div className="vx-lower-grid"><section style={card}><h2 className="vx-title">Recent leads</h2>{leads.length?leads.map(x=><div className="vx-record" key={x.id}><b>{x.caller_name||'Caller'}</b><span style={muted}>{x.intent||'Enquiry'} · {x.phone||x.email||'No contact details'}</span></div>):<p style={muted}>No real leads yet.</p>}</section><section style={card}><h2 className="vx-title">Recent calls</h2>{calls.length?calls.map(x=><div className="vx-record" key={x.id}><b>{x.caller_phone||'Caller number unavailable'}</b><span style={muted}>{x.outcome||'No outcome'} · {x.duration_seconds??'—'} sec</span></div>):<p style={muted}>No real phone calls have been received.</p>}</section></div>
-  <section style={{...card,marginTop:18}}><div className="vx-section-head"><div><h2 className="vx-title">Email delivery</h2><p style={muted}>Email sending is not configured yet.</p></div><span className="vx-status vx-status-off">NOT CONFIGURED</span></div><p style={muted}>There is currently no email provider integration or email API key in this project. Vexora cannot send notification emails yet. We need to connect an email provider and test delivery before marking this as working.</p></section>
+  <section style={{...card,marginTop:18}}><div className="vx-section-head"><div><h2 className="vx-title">Email delivery</h2><p style={muted}>Transactional email through Brevo.</p></div><span className="vx-status">BREVO CONNECTED</span></div><p style={muted}>Send a real test email to your signed-in account ({email}). This checks your Brevo API connection and active sender configuration.</p><button type="button" style={primary} disabled={emailBusy||!email} onClick={()=>void testEmail()}>{emailBusy?'Sending test…':'Send test email to my inbox'}</button>{emailStatus&&<p role="status" style={{...muted,color:'#16834a',marginBottom:0}}>{emailStatus}</p>}</section>
   {error&&<div className="vx-error" role="alert">{error}</div>}<footer className="vx-footer">Vexora SI · Business workspace · Your data stays in your account</footer>
  </div></main>;
 }
