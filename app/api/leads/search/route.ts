@@ -116,9 +116,9 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       const source = Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < rawItems.length
         ? rawItems[sourceIndex] : rawItems.find((item) => item.link === String(p.sourceUrl || ''));
       if (!source) { rejected.invalidSource++; return []; }
-      if (/dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|\\.gov/i.test(source.link) || /definition|meaning|synonyms|antonyms|dictionary|thesaurus/i.test(source.title)) { rejected.invalidSource++; return []; }
+      if (/dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|\.gov/i.test(source.link) || /definition|meaning|synonyms|antonyms|dictionary|thesaurus/i.test(source.title)) { rejected.invalidSource++; return []; }
       const sourceEvidence = source.title + ' ' + source.description;
-      if (!/\\b(?:actively looking for|looking to hire|seeking a web designer|seeking website design|need a new website|need a website designer|hire a web designer|hire a website designer|request a quote for website design|request a web design quote|request for proposal|request for quotation|rfp for (?:web|website)|website redesign project|web design project)\\b/i.test(sourceEvidence)) { rejected.invalidSource++; return []; }
+      if (!/\b(?:actively looking for|looking to hire|seeking a web designer|seeking website design|need a new website|need a website designer|hire a web designer|hire a website designer|request a quote for website design|request a web design quote|request for proposal|request for quotation|rfp for (?:web|website)|website redesign project|web design project)\b/i.test(sourceEvidence)) { rejected.invalidSource++; return []; }
       if (typeof p.companyName !== 'string' || !p.companyName.trim()) { rejected.missingCompany++; return []; }
       const sourceText = source.title + ' ' + source.description;
       const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
@@ -137,24 +137,24 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
     });
     if (!prospects.length) {
       // Never treat generic words such as "request" or "website" as buying intent.
-      const intentPattern = /\\b(?:actively looking for|looking to hire|seeking a web designer|seeking website design|need a new website|need a website designer|hire a web designer|hire a website designer|request a quote for website design|request a web design quote|request for proposal|request for quotation|rfp for (?:web|website)|website redesign project|web design project)\\b/i;
-      const servicePattern = /\\b(?:website design|web design|web development|website redesign|web designer|website designer|web developer)\\b/i;
-      const excludedHost = /(?:^|\\.)(?:dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|pa\\.gov|usa\\.gov)(?:\\.|$)/i;
-      const excludedTitle = /\\b(?:definition|meaning|synonyms?|antonyms?|dictionary|thesaurus)\\b/i;
+      const intentPattern = /\b(?:actively looking for|looking to hire|seeking a web designer|seeking website design|need a new website|need a website designer|hire a web designer|hire a website designer|request a quote for website design|request a web design quote|request for proposal|request for quotation|rfp for (?:web|website)|website redesign project|web design project)\b/i;
+      const servicePattern = /\b(?:website design|web design|web development|website redesign|web designer|website designer|web developer)\b/i;
+      const excludedHost = /(?:^|\.)(?:dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|pa\.gov|usa\.gov)(?:\.|$)/i;
+      const excludedTitle = /\b(?:definition|meaning|synonyms?|antonyms?|dictionary|thesaurus)\b/i;
       const used = new Set<string>();
       let rejectedNoIntent = 0, rejectedNonBusiness = 0;
       prospects = rawItems.flatMap((source) => {
         const evidence = source.title + ' ' + source.description;
         let host = '';
-        try { host = new URL(source.link).hostname.replace(/^www\\./i, ''); } catch {}
+        try { host = new URL(source.link).hostname.replace(/^www\./i, ''); } catch {}
         if (!host || excludedHost.test(host) || excludedTitle.test(source.title)) { rejectedNonBusiness++; return []; }
         if (!intentPattern.test(evidence) || !servicePattern.test(evidence)) { rejectedNoIntent++; return []; }
-        const normalized = source.link.split('#')[0].replace(/\\/$/, '').toLowerCase();
+        const normalized = source.link.split('#')[0].replace(/\/$/, '').toLowerCase();
         if (used.has(normalized)) return [];
         used.add(normalized);
-        const companyName = source.title.split(/\\s[|–—]\\s|\\s-\\s/)[0].trim();
+        const companyName = source.title.split(/\s[|–—]\s|\s-\s/)[0].trim();
         if (companyName.length < 3 || /^(?:home|homepage|services|blog|news|request|website|web design)$/i.test(companyName)) { rejectedNonBusiness++; return []; }
-        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);
+        const emailMatch = evidence.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
         return [{
           business_id: businessId, search_query: query, company_name: companyName.slice(0, 160),
           contact_name: null, email: emailMatch ? emailMatch[0].toLowerCase() : null,
