@@ -127,7 +127,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
       const email = emailMatch && (!suppliedEmail || suppliedEmail.toLowerCase() === emailMatch[0].toLowerCase())
         ? emailMatch[0].toLowerCase() : null;
       return [{
-        business_id: businessId, search_query: query, normalized_domain: (() => { try { return new URL(source.link).hostname.toLowerCase().replace(/^www\\./, ''); } catch { return null; } })(), company_name: p.companyName.trim().slice(0, 160),
+        business_id: businessId, search_query: query, normalized_domain: (() => { try { return new URL(source.link).hostname.toLowerCase().replace(/^www[.]/, ''); } catch { return null; } })(), company_name: p.companyName.trim().slice(0, 160),
         contact_name: typeof p.contactName === 'string' ? p.contactName.slice(0, 120) : null,
         email, website: typeof p.website === 'string' && /^https?:\/\//i.test(p.website) ? p.website.slice(0, 500) : null,
         source_url: source.link, source_title: source.title.slice(0, 300),
