@@ -76,9 +76,10 @@ export async function POST(request: NextRequest) {
     console.info('Lead search provider returned results:', searchResult.provider, rawItems.length);
     if (!rawItems.length) return NextResponse.json({ error: 'No indexed results were returned. Try a more specific search phrase or another country.' }, { status: 200, headers: { 'x-vexora-empty': '1' } });
 
-    const prompt = `You are Vexora's B2B lead research analyst. User's search instruction: "${query}". Target country: "${country || 'not specified'}". Business using Vexora: "${businesses[0].name}" (${businesses[0].industry}).
-Search provider: ${searchResult.provider}. Review only the supplied search engine results. Select results that represent a real business, organization, or a specific public opportunity relevant to the user's instruction. Do not invent companies, contact names, email addresses, websites, facts, or hiring intent. A result may be included without an email. Only return an email if the exact email address appears literally in the title or description. Ignore directories, generic articles, social profiles without clear business identity, duplicates, and irrelevant pages. Score fit from 0-100 and explain briefly. Return ONLY JSON: {"prospects":[{"sourceUrl":"exact supplied URL","companyName":"name","contactName":null,"email":null,"website":null,"description":"short factual summary","fitScore":0,"fitReason":"short reason"}]}.
-Supplied results: ${JSON.stringify(rawItems)}`;
+    const indexedItems = rawItems.map((item, sourceIndex) => ({ sourceIndex, ...item }));
+    const prompt = `You are Vexora's B2B lead research analyst. User instruction: "${query}". Target country: "${country || 'not specified'}". Workspace: "${businesses[0].name}" (${businesses[0].industry}).
+Review the indexed public search results. Return only genuine businesses, organizations, or specific public opportunities relevant to the instruction. Do not claim a business is actively buying, hiring, or seeking a service unless the supplied result explicitly proves that intent. Do not invent company names, people, emails, websites, facts, or intent. A result can be included without an email. Ignore directories, generic articles, irrelevant pages, and duplicates. Use the exact integer sourceIndex from the supplied result; do not return a URL instead of sourceIndex. Give a short factual summary, fit score 0-100, and explain the match. Return ONLY JSON in this exact shape: {"prospects":[{"sourceIndex":0,"companyName":"name as shown in result","contactName":null,"email":null,"website":null,"description":"factual summary","fitScore":50,"fitReason":"why it matches"}]}.
+Indexed results: ${JSON.stringify(indexedItems)}`;
     const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }),
@@ -92,12 +93,19 @@ Supplied results: ${JSON.stringify(rawItems)}`;
     const output = aiPayload?.candidates?.[0]?.content?.parts?.map((part: {text?:string}) => part.text || '').join('');
     let parsed: any;
     try { parsed = JSON.parse(output || '{}'); } catch { return NextResponse.json({ error: 'AI returned an unreadable result. Please retry.' }, { status: 502 }); }
-    const sourceMap = new Map(rawItems.map((item) => [item.link, item]));
-    const prospects = (Array.isArray(parsed.prospects) ? parsed.prospects : []).slice(0, 12).flatMap((p: any) => {
-      const source = sourceMap.get(String(p.sourceUrl || ''));
-      if (!source || typeof p.companyName !== 'string' || !p.companyName.trim()) return [];
-      const email = typeof p.email === 'string' && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(p.email) &&
-        (source.title + ' ' + source.description).toLowerCase().includes(p.email.toLowerCase()) ? p.email.toLowerCase() : null;
+    const parsedProspects = Array.isArray(parsed.prospects) ? parsed.prospects : [];
+    const rejected = { invalidSource: 0, missingCompany: 0 };
+    const prospects = parsedProspects.slice(0, 18).flatMap((p: any) => {
+      const sourceIndex = Number(p.sourceIndex);
+      const source = Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < rawItems.length
+        ? rawItems[sourceIndex] : rawItems.find((item) => item.link === String(p.sourceUrl || ''));
+      if (!source) { rejected.invalidSource++; return []; }
+      if (typeof p.companyName !== 'string' || !p.companyName.trim()) { rejected.missingCompany++; return []; }
+      const sourceText = source.title + ' ' + source.description;
+      const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);
+      const suppliedEmail = typeof p.email === 'string' ? p.email.trim() : '';
+      const email = emailMatch && (!suppliedEmail || suppliedEmail.toLowerCase() === emailMatch[0].toLowerCase())
+        ? emailMatch[0].toLowerCase() : null;
       return [{
         business_id: businessId, search_query: query, company_name: p.companyName.trim().slice(0, 160),
         contact_name: typeof p.contactName === 'string' ? p.contactName.slice(0, 120) : null,
@@ -108,7 +116,8 @@ Supplied results: ${JSON.stringify(rawItems)}`;
         fit_reason: (typeof p.fitReason === 'string' ? p.fitReason : 'Potential match based on indexed search results.').slice(0, 500)
       }];
     });
-    if (!prospects.length) return NextResponse.json({ prospects: [], message: 'Search results were found, but none could be confidently qualified. Try narrowing the instruction.' });
+    console.info('Lead qualification summary:', JSON.stringify({ provider: searchResult.provider, rawResults: rawItems.length, aiCandidates: parsedProspects.length, accepted: prospects.length, rejected }));
+    if (!prospects.length) return NextResponse.json({ prospects: [], message: 'The search provider returned pages, but the AI could not verify enough real business matches. Try a narrower industry, location, or service keyword.' });
     const insertResponse = await fetch(url + '/rest/v1/prospects?on_conflict=business_id,source_url', {
       method: 'POST',
       headers: { apikey: anon, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
