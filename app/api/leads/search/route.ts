@@ -170,7 +170,7 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
     if (!prospects.length) return NextResponse.json({ prospects: [], message: 'The search provider returned pages, but the AI could not verify enough real business matches. Try a narrower industry, location, or service keyword.' });
     const candidateDomains = [...new Set(prospects.map((p: any) => p.normalized_domain).filter(Boolean))];
     if (candidateDomains.length) {
-      const domainFilter = 'in.(' + candidateDomains.map((d: string) => '"' + d.replace(/"/g, '') + '"').join(',') + ')';
+      const domainFilter = 'in.(' + candidateDomains.map((d: unknown) => '"' + String(d).replace(/"/g, '') + '"').join(',') + ')';
       const existingResponse = await fetch(url + '/rest/v1/prospects?business_id=eq.' + encodeURIComponent(businessId) + '&normalized_domain=' + encodeURIComponent(domainFilter) + '&select=normalized_domain', { headers: { apikey: anon, Authorization: 'Bearer ' + token }, cache: 'no-store' });
       const existingRows = await existingResponse.json().catch(() => []);
       const existingDomains = new Set(Array.isArray(existingRows) ? existingRows.map((row: any) => row.normalized_domain) : []);
