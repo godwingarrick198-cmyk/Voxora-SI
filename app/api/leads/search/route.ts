@@ -16,6 +16,38 @@ function xmlItems(xml: string) {
   }).filter((item) => item.title && /^https?:\/\//i.test(item.link));
 }
 
+
+function decodeHtml(value: string) {
+  return value.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+async function searchPublicWeb(searchText: string) {
+  const headers = { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36', accept: 'text/html,application/rss+xml,application/xml;q=0.9,*/*;q=0.8' };
+  try {
+    const response = await fetch('https://www.bing.com/search?format=rss&q=' + encodeURIComponent(searchText), { headers, cache: 'no-store', signal: AbortSignal.timeout(12000) });
+    if (response.ok) {
+      const items = xmlItems(await response.text());
+      if (items.length) return { items, provider: 'Bing' };
+    }
+  } catch (error) { console.warn('Bing lead search unavailable:', error instanceof Error ? error.message : 'unknown error'); }
+  try {
+    const response = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(searchText), { headers, cache: 'no-store', signal: AbortSignal.timeout(12000) });
+    if (!response.ok) throw new Error('DuckDuckGo returned HTTP ' + response.status);
+    const html = await response.text();
+    const items = [...html.matchAll(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\\s\\S]*?)<\\/a>/gi)].map((m) => {
+      let link = decodeHtml(m[1]);
+      try { const parsed = new URL(link); if (parsed.hostname.includes('duckduckgo.com')) link = parsed.searchParams.get('uddg') || link; } catch {}
+      const after = html.slice((m.index || 0), (m.index || 0) + 5000);
+      const snippet = after.match(/class="result__snippet"[^>]*>([\\s\\S]*?)<\\/[^>]+>/i)?.[1] || '';
+      return { title: clean(decodeHtml(m[2])), link, description: clean(decodeHtml(snippet)) };
+    }).filter((x) => x.title && /^https?:\\/\\//i.test(x.link));
+    if (items.length) return { items, provider: 'DuckDuckGo' };
+    throw new Error('DuckDuckGo returned no parseable public results');
+  } catch (error) {
+    console.error('Public web search providers failed:', error instanceof Error ? error.message : 'unknown error');
+    throw new Error('Search providers did not return usable results. Please retry with a shorter, more specific search.');
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
@@ -39,24 +71,23 @@ export async function POST(request: NextRequest) {
     if (!businessResponse.ok || !Array.isArray(businesses) || !businesses[0]) return NextResponse.json({ error: 'Business workspace not found or access denied.' }, { status: 403 });
 
     const searchText = [query, country ? 'in ' + country : ''].filter(Boolean).join(' ');
-    const rssUrl = 'https://www.bing.com/search?format=rss&q=' + encodeURIComponent(searchText);
-    const searchResponse = await fetch(rssUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VexoraLeadFinder/1.0)' }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
-    if (!searchResponse.ok) return NextResponse.json({ error: 'The search provider is temporarily unavailable. Try again shortly.' }, { status: 502 });
-    const rawItems = xmlItems(await searchResponse.text()).slice(0, 18);
+    const searchResult = await searchPublicWeb(searchText);
+    const rawItems = searchResult.items.slice(0, 18);
+    console.info('Lead search provider returned results:', searchResult.provider, rawItems.length);
     if (!rawItems.length) return NextResponse.json({ error: 'No indexed results were returned. Try a more specific search phrase or another country.' }, { status: 200, headers: { 'x-vexora-empty': '1' } });
 
     const prompt = `You are Vexora's B2B lead research analyst. User's search instruction: "${query}". Target country: "${country || 'not specified'}". Business using Vexora: "${businesses[0].name}" (${businesses[0].industry}).
-Review only the supplied search engine results. Select results that represent a real business, organization, or a specific public opportunity relevant to the user's instruction. Do not invent companies, contact names, email addresses, websites, facts, or hiring intent. A result may be included without an email. Only return an email if the exact email address appears literally in the title or description. Ignore directories, generic articles, social profiles without clear business identity, duplicates, and irrelevant pages. Score fit from 0-100 and explain briefly. Return ONLY JSON: {"prospects":[{"sourceUrl":"exact supplied URL","companyName":"name","contactName":null,"email":null,"website":null,"description":"short factual summary","fitScore":0,"fitReason":"short reason"}]}.
+Search provider: ${searchResult.provider}. Review only the supplied search engine results. Select results that represent a real business, organization, or a specific public opportunity relevant to the user's instruction. Do not invent companies, contact names, email addresses, websites, facts, or hiring intent. A result may be included without an email. Only return an email if the exact email address appears literally in the title or description. Ignore directories, generic articles, social profiles without clear business identity, duplicates, and irrelevant pages. Score fit from 0-100 and explain briefly. Return ONLY JSON: {"prospects":[{"sourceUrl":"exact supplied URL","companyName":"name","contactName":null,"email":null,"website":null,"description":"short factual summary","fitScore":0,"fitReason":"short reason"}]}.
 Supplied results: ${JSON.stringify(rawItems)}`;
     const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }),
       signal: AbortSignal.timeout(25000)
     });
-    const aiPayload = await aiResponse.json();
+    const aiPayload = await aiResponse.json().catch(() => ({}));
     if (!aiResponse.ok) {
       console.error('Lead analysis Gemini error:', aiResponse.status, aiPayload?.error?.message);
-      return NextResponse.json({ error: aiResponse.status === 429 ? 'Gemini quota or rate limit reached. Try again later.' : 'AI prospect analysis failed. Check the Gemini configuration and retry.' }, { status: 502 });
+      return NextResponse.json({ error: aiResponse.status === 429 ? 'Gemini quota or rate limit reached. Try again later.' : 'Gemini API error (' + aiResponse.status + '): ' + String(aiPayload?.error?.message || 'AI prospect analysis failed').slice(0, 220) }, { status: 502 });
     }
     const output = aiPayload?.candidates?.[0]?.content?.parts?.map((part: {text?:string}) => part.text || '').join('');
     let parsed: any;
