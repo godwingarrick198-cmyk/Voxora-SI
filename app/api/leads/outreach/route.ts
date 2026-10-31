@@ -53,6 +53,10 @@ export async function POST(request: NextRequest) {
     const message = String(body.body || '').trim().slice(0,8000);
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: 'No verified public email address is available for this prospect. Do not guess one.' }, { status: 400 });
     if (!subject || !message) return NextResponse.json({ error: 'Review and provide both an email subject and message.' }, { status: 400 });
+    const priorResponse = await fetch(auth.url + '/rest/v1/prospect_messages?prospect_id=eq.' + encodeURIComponent(prospect.id) + '&direction=eq.outbound&delivery_status=eq.sent&select=id&limit=1', { headers: { apikey: auth.anon, Authorization: 'Bearer ' + auth.token }, cache: 'no-store' });
+    const priorMessages = await priorResponse.json();
+    if (!priorResponse.ok) return NextResponse.json({ error: 'Could not verify previous outreach history. Sending was stopped for safety.' }, { status: 502 });
+    if (Array.isArray(priorMessages) && priorMessages.length) return NextResponse.json({ error: 'An email has already been sent to this prospect from Vexora. Review the message history before sending again.' }, { status: 409 });
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'Brevo sending is not configured.' }, { status: 503 });
     const senderResponse = await fetch('https://api.brevo.com/v3/senders?limit=50&offset=0', { headers: { accept: 'application/json', 'api-key': apiKey }, cache: 'no-store' });
