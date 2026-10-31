@@ -117,6 +117,8 @@ Indexed results: ${JSON.stringify(indexedItems)}`;
         ? rawItems[sourceIndex] : rawItems.find((item) => item.link === String(p.sourceUrl || ''));
       if (!source) { rejected.invalidSource++; return []; }
       if (/dictionary|thesaurus|wikipedia|wiktionary|definitions|vocabulary|merriam-webster|cambridge|collinsdictionary|thefreedictionary|\\.gov/i.test(source.link) || /definition|meaning|synonyms|antonyms|dictionary|thesaurus/i.test(source.title)) { rejected.invalidSource++; return []; }
+      const sourceEvidence = source.title + ' ' + source.description;
+      if (!/\\b(?:actively looking for|looking to hire|seeking a web designer|seeking website design|need a new website|need a website designer|hire a web designer|hire a website designer|request a quote for website design|request a web design quote|request for proposal|request for quotation|rfp for (?:web|website)|website redesign project|web design project)\\b/i.test(sourceEvidence)) { rejected.invalidSource++; return []; }
       if (typeof p.companyName !== 'string' || !p.companyName.trim()) { rejected.missingCompany++; return []; }
       const sourceText = source.title + ' ' + source.description;
       const emailMatch = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
