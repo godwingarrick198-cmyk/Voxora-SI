@@ -42,11 +42,12 @@ export async function POST(request: NextRequest) {
   const name=String(body.companyName||body.title||'').slice(0,180), location=String(body.location||country).slice(0,180);
   const osmWebsite=String(body.website||'').slice(0,500), tags=body.tags&&typeof body.tags==='object'?body.tags:{};
   if(!niche||!country||!name) return NextResponse.json({error:'Incomplete business evidence.'},{status:400});
-  let results:Item[]=[]; try { results=await findSites(name,location); } catch(e) { console.warn('Website search failed:',e); }
+  let results:Item[]=[]; let searchSucceeded=false; try { results=await findSites(name,location); searchSucceeded=true; } catch(e) { console.warn('Website search failed:',e); }
   const urls=new Map<string,string>();
   if(/^https?:\/\//i.test(osmWebsite)) urls.set(domainOf(osmWebsite),osmWebsite);
   for(const item of results){const d=domainOf(item.url);if(d&&!blocked.test(d)&&!urls.has(d)) urls.set(d,item.url);}
-  const sites:Site[]=[]; for(const u of [...urls.values()].slice(0,3)) sites.push(await inspectSite(u));
+  const siteUrls=[...urls.values()].slice(0,3); const sites:Site[]=await Promise.all(siteUrls.map(inspectSite));
+  if(!searchSucceeded && !/^https?:\/\//i.test(osmWebsite)) return NextResponse.json({qualified:false,websiteStatus:'uncertain',website:'',companyName:name,reason:'Could not complete the public website search; manual review required.',fitScore:0,websiteChecks:0});
   const contact={phone:String(tags['contact:phone']||tags.phone||'').slice(0,80),email:String(tags['contact:email']||tags.email||'').slice(0,120),facebook:String(tags['contact:facebook']||tags.facebook||'').slice(0,200),instagram:String(tags['contact:instagram']||tags.instagram||'').slice(0,200)};
   const prompt = [
    'You qualify real local businesses as potential website-design clients.',
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
    'good_website means a working official site has adequate business information and a contact path. uncertain means business identity or official-site match is ambiguous.',
    'Qualify only if this is clearly a real business in the requested niche/country AND status is no_website_found or needs_improvement. Never invent. Return JSON only: {"qualified":boolean,"websiteStatus":"no_website_found|needs_improvement|good_website|uncertain","website":"official URL or empty","companyName":"evidenced name","reason":"brief evidence-based explanation","fitScore":integer 0-100}.'
   ].join(' ');
-  const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.1,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(18000)});
+  const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.1,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(15000)});
   const payload=await response.json().catch(()=>({}));
   if(!response.ok) return NextResponse.json({error:String(payload?.error?.message||'AI provider failed').slice(0,220)},{status:502});
   const output=payload?.candidates?.[0]?.content?.parts?.map((p:{text?:string})=>p.text||'').join('')||'{}';
