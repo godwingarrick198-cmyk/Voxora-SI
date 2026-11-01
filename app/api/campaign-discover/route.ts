@@ -61,15 +61,16 @@ export async function POST(request: NextRequest) {
 
     const categories = categoriesFor(niche);
     const search = async (selected: string[]) => {
-      const response = await fetch('https://api.geoapify.com/v2/places', {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categories: selected,
-          filter: { type: 'countrycode', values: [code] },
-          limit,
-          lang: 'en',
-        }),
+      const url = new URL('https://api.geoapify.com/v2/places');
+      url.searchParams.set('categories', selected.join(','));
+      url.searchParams.set('filter', 'countrycode:' + code);
+      url.searchParams.set('limit', String(limit));
+      url.searchParams.set('lang', 'en');
+      url.searchParams.set('apiKey', apiKey);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(12000),
         cache: 'no-store',
       });
