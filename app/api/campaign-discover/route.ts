@@ -7,6 +7,7 @@ const countryName = (s: string) => s.trim().replace(/\s+/g, ' ').slice(0, 100);
 
 const categoriesFor = (n: string): string[] => {
   const v = n.toLowerCase();
+  if (/hotel|hostel|motel|accommodation|guest.?house|resort|hoyel/.test(v)) return ['accommodation'];
   if (/estate|real estate|property|realtor|letting|property management/.test(v)) return ['service.estate_agent', 'commercial'];
   if (/salon|barber|beauty|hairdresser|hair stylist/.test(v)) return ['service.beauty.hairdresser', 'service.beauty'];
   if (/clean|janitor|maid|carpet|housekeeping/.test(v)) return ['service.cleaning'];
@@ -54,8 +55,10 @@ export async function POST(request: NextRequest) {
       throw new Error('Country lookup failed (HTTP ' + geocode.status + '): ' + String(geoData?.message || geoData?.error || 'provider error').slice(0, 180));
     }
 
-    const code = String(geoData?.results?.[0]?.country_code || '').toLowerCase();
-    if (!/^[a-z]{2}$/.test(code)) {
+    const countryResult = geoData?.results?.[0];
+    const code = String(countryResult?.country_code || '').toLowerCase();
+    const countryPlaceId = String(countryResult?.place_id || '');
+    if (!/^[a-z]{2}$/.test(code) || !countryPlaceId) {
       return NextResponse.json({ error: 'Could not resolve the target country. Use a full country name.' }, { status: 422 });
     }
 
@@ -63,7 +66,9 @@ export async function POST(request: NextRequest) {
     const search = async (selected: string[]) => {
       const url = new URL('https://api.geoapify.com/v2/places');
       url.searchParams.set('categories', selected.join(','));
-      url.searchParams.set('filter', 'countrycode:' + code);
+      // Geoapify's GET countrycode filter is documented as coming soon on its
+      // Places API. Use the country boundary's Geoapify place_id instead.
+      url.searchParams.set('filter', 'place:' + countryPlaceId);
       url.searchParams.set('limit', String(limit));
       url.searchParams.set('lang', 'en');
       url.searchParams.set('apiKey', apiKey);
