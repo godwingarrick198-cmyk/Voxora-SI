@@ -142,13 +142,28 @@ export async function POST(request: NextRequest) {
       };
     }).filter(Boolean);
 
+    // Only return businesses with a publicly listed, syntactically valid email.
+    // Do not qualify or store businesses whose contact email is missing.
+    const emailPattern = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+    const emailResults = results.filter((item: any) => {
+      const email = String(item.tags?.['contact:email'] || item.tags?.email || '').trim();
+      return emailPattern.test(email);
+    }).map((item: any) => ({
+      ...item,
+      tags: {
+        ...item.tags,
+        email: String(item.tags?.['contact:email'] || item.tags?.email || '').trim(),
+      },
+    }));
+
     return NextResponse.json({
       provider: 'Geoapify Places API',
       country,
       countryCode: code,
       categories,
-      returned: results.length,
-      results,
+      returned: emailResults.length,
+      results: emailResults,
+      filteredWithoutEmail: results.length - emailResults.length,
     });
   } catch (error) {
     console.error('Campaign discovery failed:', error);
