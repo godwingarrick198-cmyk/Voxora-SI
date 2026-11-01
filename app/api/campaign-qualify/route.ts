@@ -42,6 +42,10 @@ export async function POST(request: NextRequest) {
   const name=String(body.companyName||body.title||'').slice(0,180), location=String(body.location||country).slice(0,180);
   const osmWebsite=String(body.website||'').slice(0,500), tags=body.tags&&typeof body.tags==='object'?body.tags:{};
   if(!niche||!country||!name) return NextResponse.json({error:'Incomplete business evidence.'},{status:400});
+  const publicEmail=String(tags['contact:email']||tags.email||'').trim();
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(publicEmail)) {
+   return NextResponse.json({qualified:false,websiteStatus:'uncertain',website:'',email:'',companyName:name,reason:'No publicly listed email address was found. Businesses without an email are not eligible.',fitScore:0,websiteChecks:0});
+  }
   let results:Item[]=[]; let searchSucceeded=false; try { results=await findSites(name,location); searchSucceeded=true; } catch(e) { console.warn('Website search failed:',e); }
   const urls=new Map<string,string>();
   if(/^https?:\/\//i.test(osmWebsite)) urls.set(domainOf(osmWebsite),osmWebsite);
@@ -66,6 +70,6 @@ export async function POST(request: NextRequest) {
   const output=payload?.candidates?.[0]?.content?.parts?.map((p:{text?:string})=>p.text||'').join('')||'{}';
   const parsed=JSON.parse(output), status=['no_website_found','needs_improvement','good_website','uncertain'].includes(parsed.websiteStatus)?parsed.websiteStatus:'uncertain';
   const qualified=parsed.qualified===true&&(status==='no_website_found'||status==='needs_improvement');
-  return NextResponse.json({qualified,websiteStatus:status,website:typeof parsed.website==='string'&&/^https?:\/\//i.test(parsed.website)?parsed.website.slice(0,500):'',companyName:typeof parsed.companyName==='string'?parsed.companyName.slice(0,160):name,reason:typeof parsed.reason==='string'?parsed.reason.slice(0,500):'Website opportunity needs manual verification.',fitScore:Number.isFinite(Number(parsed.fitScore))?Math.max(0,Math.min(100,Math.round(Number(parsed.fitScore)))):70,websiteChecks:sites.length});
+  return NextResponse.json({qualified,websiteStatus:status,email:publicEmail,website:typeof parsed.website==='string'&&/^https?:\/\//i.test(parsed.website)?parsed.website.slice(0,500):'',companyName:typeof parsed.companyName==='string'?parsed.companyName.slice(0,160):name,reason:typeof parsed.reason==='string'?parsed.reason.slice(0,500):'Website opportunity needs manual verification.',fitScore:Number.isFinite(Number(parsed.fitScore))?Math.max(0,Math.min(100,Math.round(Number(parsed.fitScore)))):70,websiteChecks:sites.length});
  } catch(e) { console.error('Campaign qualification failed:',e); return NextResponse.json({error:'AI qualification failed.'},{status:502}); }
 }
